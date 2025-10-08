@@ -12,6 +12,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Carga de html2canvas para capturar elementos del DOM -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
     <style>
         /* Estilo base para el cuerpo */
         body {
@@ -35,6 +38,41 @@
         .export-btn:hover {
             transform: translateY(-2px);
         }
+        /* Estilo para estadísticas detalladas */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #3b82f6;
+        }
+        /* Estilo para paginación */
+        .pagination-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #d1d5db;
+            background-color: white;
+            color: #374151;
+            cursor: pointer;
+            border-radius: 0.375rem;
+        }
+        .pagination-btn:hover {
+            background-color: #f3f4f6;
+        }
+        .pagination-btn.active {
+            background-color: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        /* Estado de carga */
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -45,6 +83,10 @@
             <div>
                 <h2 class="text-2xl font-extrabold text-gray-800">Estadística Detallada (Defensoria 6)</h2>
                 <p class="text-sm text-gray-500">Registre casos según los ítems y materias específicos de la planilla oficial.</p>
+                <div id="connection-status" class="flex items-center mt-1">
+                    <span class="text-xs text-gray-500">Estado: </span>
+                    <span id="status-text" class="text-xs ml-1">Conectando...</span>
+                </div>
             </div>
             <div class="mt-2 md:mt-0 flex space-x-2">
                 <button id="export-pdf-btn" class="export-btn bg-red-600 text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-red-700 transition duration-200 shadow-md">
@@ -69,36 +111,25 @@
                 <form id="registro-form" class="space-y-4">
                     <div>
                         <label for="area" class="block text-sm font-medium text-gray-700 mb-1">Tipo de Intervención (Ítem y Materia)</label>
-                        <!-- Opciones basadas en el PDF: Combinando Ítem de Acción + Materia, en el orden solicitado. -->
                         <select id="area" name="area" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
-                            <!-- ÍTEM 1: Expedientes y/o juicios iniciados -->
                             <optgroup label="1 - Expedientes y/o juicios iniciados">
                                 <option value="1 - Expedientes y/o juicios iniciados (Civil y comercial)">1 (Civil y comercial)</option>
                                 <option value="1 - Expedientes y/o juicios iniciados (Familia)">1 (Familia)</option>
                                 <option value="1 - Expedientes y/o juicios iniciados (Laboral)">1 (Laboral)</option>
                             </optgroup>
-                            <!-- ÍTEM 1: Expedientes o legajos admin. (nivel superior) -->
                             <option value="1 - Expedientes o legajos admin.">1 - Expedientes o legajos admin.</option>
-
-                            <!-- ÍTEM 2: Contestación de demanda -->
                             <optgroup label="2 - Contestación de demanda">
                                 <option value="2 - Contestación de demanda (Civil y comercial)">2 (Civil y comercial)</option>
                                 <option value="2 - Contestación de demanda (Laboral)">2 (Laboral)</option>
                                 <option value="2 - Contestación de demanda (Familia)">2 (Familia)</option>
                             </optgroup>
-
-                            <!-- ÍTEM 3: Escritos Varios / Intervenciones -->
                             <optgroup label="3 - Escritos Varios / Intervenciones">
                                 <option value="3 - Escritos Varios / Intervenciones (Penal)">3 (Penal)</option>
                                 <option value="3 - Escritos Varios / Intervenciones (Civil y comercial)">3 (Civil y comercial)</option>
                                 <option value="3 - Escritos Varios / Intervenciones (Familia)">3 (Familia)</option>
                                 <option value="3 - Escritos Varios / Intervenciones (Laboral)">3 (Laboral)</option>
                             </optgroup>
-
-                            <!-- ÍTEM 4: Patrocinios durante el trámite de proceso Judicial -->
                             <option value="4 - Patrocinios durante el trámite de proceso Judicial">4 - Patrocinios durante el trámite de proceso Judicial</option>
-
-                            <!-- ÍTEM 5: Recursos planteados -->
                             <optgroup label="5 - Recursos planteados">
                                 <option value="5 - Recursos planteados (Apelaciones)">5 (Apelaciones)</option>
                                 <option value="5 - Recursos planteados (Nulidades)">5 (Nulidades)</option>
@@ -106,8 +137,6 @@
                                 <option value="5 - Recursos planteados (Queja)">5 (Queja)</option>
                                 <option value="5 - Recursos planteados (Casación)">5 (Casación)</option>
                             </optgroup>
-
-                            <!-- ÍTEM 6: Audiencias -->
                             <optgroup label="6 - Audiencias">
                                 <option value="6 - Audiencias (Penal / Cámara Gesell)">6 (Penal / Cámara Gesell)</option>
                                 <option value="6 - Audiencias (Civil)">6 (Civil)</option>
@@ -116,8 +145,6 @@
                                 <option value="6 - Audiencias (Laboral)">6 (Laboral)</option>
                                 <option value="6 - Audiencias (Ce.Ju...)">6 (Ce.Ju...)</option>
                             </optgroup>
-                            
-                            <!-- Opción de reserva -->
                             <option value="99 - Otro tipo de intervención no especificado">99 - Otro tipo de intervención no especificado</option>
                         </select>
                     </div>
@@ -125,8 +152,39 @@
                         <label for="descripcion" class="block text-sm font-medium text-gray-700 mb-1">Detalle o Expediente</label>
                         <input type="text" id="descripcion" name="descripcion" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150" placeholder="Ej: Demanda inicial de divorcio">
                     </div>
-                    <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200 shadow-md hover:shadow-lg">
-                        Agregar Registro
+                    
+                    <!-- Selector de Trimestre Informado -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="trimestre-informe" class="block text-sm font-medium text-gray-700 mb-1">Trimestre Informado</label>
+                            <select id="trimestre-informe" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                                <option value="1º Trimestre">1º Trimestre</option>
+                                <option value="2º Trimestre">2º Trimestre</option>
+                                <option value="3º Trimestre">3º Trimestre</option>
+                                <option value="4º Trimestre">4º Trimestre</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="anio-informe" class="block text-sm font-medium text-gray-700 mb-1">Año del Informe</label>
+                            <select id="anio-informe" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                                <option value="2023">2023</option>
+                                <option value="2024">2024</option>
+                                <option value="2025" selected>2025</option>
+                                <option value="2026">2026</option>
+                                <option value="2027">2027</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Responsable del Informe -->
+                    <div>
+                        <label for="responsable-informe" class="block text-sm font-medium text-gray-700 mb-1">Responsable del Informe</label>
+                        <input type="text" id="responsable-informe" name="responsable-informe" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150" placeholder="Nombre y Apellido">
+                    </div>
+                    
+                    <button type="submit" id="submit-btn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200 shadow-md hover:shadow-lg">
+                        <span id="submit-text">Agregar Registro</span>
+                        <span id="submit-loading" class="hidden">Guardando...</span>
                     </button>
                 </form>
             </div>
@@ -139,14 +197,40 @@
                         <label for="filter-area" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Tipo de Intervención</label>
                         <select id="filter-area" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
                             <option value="all">Todos los tipos</option>
-                            <!-- Las mismas opciones que en el formulario principal -->
                             <optgroup label="1 - Expedientes y/o juicios iniciados">
                                 <option value="1 - Expedientes y/o juicios iniciados (Civil y comercial)">1 (Civil y comercial)</option>
                                 <option value="1 - Expedientes y/o juicios iniciados (Familia)">1 (Familia)</option>
                                 <option value="1 - Expedientes y/o juicios iniciados (Laboral)">1 (Laboral)</option>
                             </optgroup>
                             <option value="1 - Expedientes o legajos admin.">1 - Expedientes o legajos admin.</option>
-                            <!-- Resto de opciones... -->
+                            <optgroup label="2 - Contestación de demanda">
+                                <option value="2 - Contestación de demanda (Civil y comercial)">2 (Civil y comercial)</option>
+                                <option value="2 - Contestación de demanda (Laboral)">2 (Laboral)</option>
+                                <option value="2 - Contestación de demanda (Familia)">2 (Familia)</option>
+                            </optgroup>
+                            <optgroup label="3 - Escritos Varios / Intervenciones">
+                                <option value="3 - Escritos Varios / Intervenciones (Penal)">3 (Penal)</option>
+                                <option value="3 - Escritos Varios / Intervenciones (Civil y comercial)">3 (Civil y comercial)</option>
+                                <option value="3 - Escritos Varios / Intervenciones (Familia)">3 (Familia)</option>
+                                <option value="3 - Escritos Varios / Intervenciones (Laboral)">3 (Laboral)</option>
+                            </optgroup>
+                            <option value="4 - Patrocinios durante el trámite de proceso Judicial">4 - Patrocinios durante el trámite de proceso Judicial</option>
+                            <optgroup label="5 - Recursos planteados">
+                                <option value="5 - Recursos planteados (Apelaciones)">5 (Apelaciones)</option>
+                                <option value="5 - Recursos planteados (Nulidades)">5 (Nulidades)</option>
+                                <option value="5 - Recursos planteados (Revocatorias)">5 (Revocatorias)</option>
+                                <option value="5 - Recursos planteados (Queja)">5 (Queja)</option>
+                                <option value="5 - Recursos planteados (Casación)">5 (Casación)</option>
+                            </optgroup>
+                            <optgroup label="6 - Audiencias">
+                                <option value="6 - Audiencias (Penal / Cámara Gesell)">6 (Penal / Cámara Gesell)</option>
+                                <option value="6 - Audiencias (Civil)">6 (Civil)</option>
+                                <option value="6 - Audiencias (Familia)">6 (Familia)</option>
+                                <option value="6 - Audiencias (Violencia Familiar)">6 (Violencia Familiar)</option>
+                                <option value="6 - Audiencias (Laboral)">6 (Laboral)</option>
+                                <option value="6 - Audiencias (Ce.Ju...)">6 (Ce.Ju...)</option>
+                            </optgroup>
+                            <option value="99 - Otro tipo de intervención no especificado">99 - Otro tipo de intervención no especificado</option>
                         </select>
                     </div>
                     <div>
@@ -171,18 +255,26 @@
             </div>
 
             <!-- Listado de Registros -->
-            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex-1 overflow-y-auto max-h-[500px]">
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex-1 overflow-y-auto">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-xl font-semibold text-gray-700">Historial de Registros</h2>
                     <span id="records-count" class="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                         Total: 0 registros
                     </span>
                 </div>
-                <ul id="lista-registros" class="space-y-3">
+                <div id="loading-registros" class="text-center py-4">
+                    <p class="text-gray-500">Cargando registros...</p>
+                </div>
+                <ul id="lista-registros" class="space-y-3 hidden">
                     <!-- Los registros se insertarán aquí por JS -->
                 </ul>
                 <p id="empty-message" class="text-gray-500 italic mt-4 hidden">No hay registros aún. ¡Añade uno para comenzar a graficar!</p>
                 <p id="no-results-message" class="text-gray-500 italic mt-4 hidden">No se encontraron registros con los filtros aplicados.</p>
+                
+                <!-- Paginación -->
+                <div id="pagination" class="mt-4 flex justify-center items-center space-x-2 hidden">
+                    <!-- Los botones de paginación se insertarán aquí por JS -->
+                </div>
             </div>
         </section>
 
@@ -201,7 +293,6 @@
             <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">Resumen de Cantidades por Intervención</h2>
                 <div id="detalle-cantidades" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <!-- Los detalles se insertarán aquí por JS -->
                     <p class="text-gray-500 italic col-span-2" id="initial-detail-message">Agregando registros se mostrará el detalle.</p>
                 </div>
             </div>
@@ -228,77 +319,235 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Estadísticas Detalladas -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Estadísticas Detalladas</h2>
+                <div id="detailed-stats" class="stats-grid">
+                    <p class="text-gray-500 italic col-span-2" id="initial-stats-message">Agregando registros se mostrarán las estadísticas detalladas.</p>
+                </div>
+            </div>
         </section>
 
     </main>
 
     <script>
-        // Clave para el almacenamiento local
+        // =============================================
+        // CONFIGURACIÓN DE FIREBASE - REEMPLAZA CON TUS DATOS
+        // =============================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyC78fL5NZ4Unwj7ku_WBpsSFrfFi_RMSPE",
+
+  authDomain: "estadistica-oficial.firebaseapp.com",
+
+  projectId: "estadistica-oficial",
+
+  storageBucket: "estadistica-oficial.firebasestorage.app",
+
+  messagingSenderId: "898002697975",
+
+  appId: "1:898002697975:web:9226a321fe0d47d7899df2"
+
+        };
+
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Clave para el almacenamiento local (como respaldo)
         const STORAGE_KEY = 'defensoriaEstadisticas';
         let chartInstance = null;
         
-        // Colores predefinidos. Se repiten cíclicamente debido al gran número de categorías.
+        // Colores predefinidos
         const COLORS = [
-            '#3b82f6', // blue-500
-            '#10b981', // emerald-500
-            '#f59e0b', // amber-500
-            '#ef4444', // red-500
-            '#a855f7', // violet-500
-            '#06b6d4', // cyan-500
-            '#f43f5e', // rose-500
-            '#84cc16', // lime-500
-            '#eab308', // yellow-500
-            '#4f46e5', // indigo-500
+            '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#a855f7',
+            '#06b6d4', '#f43f5e', '#84cc16', '#eab308', '#4f46e5',
         ];
 
-        // Lista de registros, inicialmente vacía o cargada desde localStorage
+        // Lista de registros
         let registros = [];
         let filteredRegistros = [];
+        
+        // Variables para paginación
+        let currentPage = 1;
+        const recordsPerPage = 5;
+
+        // Estado de conexión
+        let isOnline = false;
 
         /**
-         * Inicializa los datos cargando desde el almacenamiento local.
+         * Actualiza el estado de conexión
          */
-        function initializeData() {
+        function updateConnectionStatus(connected) {
+            isOnline = connected;
+            const statusElement = document.getElementById('status-text');
+            const statusIcon = document.getElementById('connection-status');
+            
+            if (connected) {
+                statusElement.textContent = 'Conectado';
+                statusElement.className = 'text-xs ml-1 text-green-600 font-medium';
+                statusIcon.classList.add('text-green-600');
+            } else {
+                statusElement.textContent = 'Sin conexión';
+                statusElement.className = 'text-xs ml-1 text-red-600 font-medium';
+                statusIcon.classList.add('text-red-600');
+            }
+        }
+
+        /**
+         * Inicializa los datos desde Firebase
+         */
+        async function initializeData() {
+            try {
+                showNotification('Conectando a la base de datos...', 'info');
+                
+                // Escuchar cambios en tiempo real
+                db.collection('registros')
+                    .orderBy('fecha', 'desc')
+                    .onSnapshot((snapshot) => {
+                        registros = [];
+                        snapshot.forEach((doc) => {
+                            const data = doc.data();
+                            registros.push({
+                                id: doc.id,
+                                ...data
+                            });
+                        });
+                        
+                        filteredRegistros = [...registros];
+                        updateConnectionStatus(true);
+                        updateUI();
+                        hideLoading();
+                        
+                    }, (error) => {
+                        console.error("Error al cargar datos:", error);
+                        updateConnectionStatus(false);
+                        // Intentar cargar desde localStorage como respaldo
+                        loadFromLocalStorage();
+                    });
+                    
+            } catch (error) {
+                console.error("Error inicializando Firebase:", error);
+                updateConnectionStatus(false);
+                loadFromLocalStorage();
+            }
+        }
+
+        /**
+         * Carga datos desde localStorage como respaldo
+         */
+        function loadFromLocalStorage() {
             const storedData = localStorage.getItem(STORAGE_KEY);
             if (storedData) {
                 try {
-                    registros = JSON.parse(storedData); 
+                    registros = JSON.parse(storedData);
                     filteredRegistros = [...registros];
+                    updateUI();
+                    showNotification('Usando datos locales (sin conexión)', 'warning');
                 } catch (e) {
                     console.error("Error al parsear datos de localStorage:", e);
                     registros = [];
                     filteredRegistros = [];
                 }
-            } else {
-                registros = [];
-                filteredRegistros = [];
+            }
+            hideLoading();
+        }
+
+        /**
+         * Guarda en Firebase y como respaldo en localStorage
+         */
+        async function saveData() {
+            // Guardar en localStorage como respaldo
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(registros));
+            
+            if (!isOnline) {
+                showNotification('Datos guardados localmente (sin conexión)', 'warning');
+                return;
             }
         }
 
         /**
-         * Guarda los registros actuales en el almacenamiento local.
+         * Agrega un nuevo registro a Firebase
          */
-        function saveData() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(registros));
+        async function addRecordToFirebase(record) {
+            try {
+                const docRef = await db.collection('registros').add(record);
+                showNotification('Registro guardado en la nube', 'success');
+                return docRef.id;
+            } catch (error) {
+                console.error("Error guardando en Firebase:", error);
+                throw error;
+            }
         }
 
         /**
+         * Elimina un registro de Firebase
+         */
+        async function deleteRecordFromFirebase(id) {
+            try {
+                await db.collection('registros').doc(id).delete();
+                showNotification('Registro eliminado de la nube', 'success');
+            } catch (error) {
+                console.error("Error eliminando de Firebase:", error);
+                throw error;
+            }
+        }
+
+        /**
+         * Limpia todos los registros de Firebase
+         */
+        async function clearAllRecordsFromFirebase() {
+            try {
+                const snapshot = await db.collection('registros').get();
+                const batch = db.batch();
+                
+                snapshot.forEach((doc) => {
+                    batch.delete(doc.ref);
+                });
+                
+                await batch.commit();
+                showNotification('Todos los registros eliminados de la nube', 'success');
+            } catch (error) {
+                console.error("Error eliminando todos los registros:", error);
+                throw error;
+            }
+        }
+
+        /**
+         * Muestra/oculta loading
+         */
+        function showLoading() {
+            document.getElementById('loading-registros').classList.remove('hidden');
+            document.getElementById('lista-registros').classList.add('hidden');
+            document.getElementById('submit-text').classList.add('hidden');
+            document.getElementById('submit-loading').classList.remove('hidden');
+            document.getElementById('submit-btn').classList.add('loading');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-registros').classList.add('hidden');
+            document.getElementById('lista-registros').classList.remove('hidden');
+            document.getElementById('submit-text').classList.remove('hidden');
+            document.getElementById('submit-loading').classList.add('hidden');
+            document.getElementById('submit-btn').classList.remove('loading');
+        }
+
+        // ... (el resto de las funciones permanecen igual: obtenerTrimestre, nombreTrimestre, getStatistics, etc.)
+        // [MANTENER TODAS LAS FUNCIONES ANTERIORES COMO renderPieChart, renderDetails, updateGeneralStats, etc.]
+
+        /**
          * Determina el trimestre de una fecha
-         * @param {Date} fecha 
-         * @returns {number} Número del trimestre (1-4)
          */
         function obtenerTrimestre(fecha) {
-            const mes = fecha.getMonth(); // 0-11
-            if (mes >= 0 && mes <= 2) return 1; // Enero-Febrero-Marzo
-            if (mes >= 3 && mes <= 5) return 2; // Abril-Mayo-Junio
-            if (mes >= 6 && mes <= 8) return 3; // Julio-Agosto-Septiembre
-            return 4; // Octubre-Noviembre-Diciembre
+            const mes = fecha.getMonth();
+            if (mes >= 0 && mes <= 2) return 1;
+            if (mes >= 3 && mes <= 5) return 2;
+            if (mes >= 6 && mes <= 8) return 3;
+            return 4;
         }
 
         /**
          * Obtiene el nombre del trimestre
-         * @param {number} trimestre 
-         * @returns {string} Nombre del trimestre
          */
         function nombreTrimestre(trimestre) {
             const nombres = {
@@ -312,16 +561,13 @@
 
         /**
          * Procesa los registros para obtener el conteo por área.
-         * @returns {Object} { labels: Array<string>, data: Array<number>, counts: Object }
          */
         function getStatistics() {
-            // 1. Contar ocurrencias por categoría
             const counts = filteredRegistros.reduce((acc, registro) => {
                 acc[registro.area] = (acc[registro.area] || 0) + 1;
                 return acc;
             }, {});
 
-            // 2. Ordena las etiquetas alfabéticamente para garantizar la consistencia en el color
             const labels = Object.keys(counts).sort();
             const data = labels.map(label => counts[label]);
 
@@ -335,11 +581,9 @@
             const { labels, data } = getStatistics();
             const ctx = document.getElementById('pieChart').getContext('2d');
 
-            // Asigna colores basándose en el índice (ciclado)
             const backgroundColors = labels.map((_, i) => COLORS[i % COLORS.length]);
 
             if (chartInstance) {
-                // Actualiza datos si la instancia ya existe
                 chartInstance.data.labels = labels;
                 chartInstance.data.datasets[0].data = data;
                 chartInstance.data.datasets[0].backgroundColor = backgroundColors;
@@ -347,7 +591,6 @@
                 return;
             }
 
-            // Crea la nueva instancia del gráfico
             chartInstance = new Chart(ctx, {
                 type: 'doughnut', 
                 data: {
@@ -368,11 +611,11 @@
                         legend: {
                             position: 'bottom',
                             labels: {
-                                padding: 8, // Menos padding debido a la cantidad de ítems
+                                padding: 8,
                                 boxWidth: 10,
                                 font: {
                                     family: 'Inter',
-                                    size: 11, // Tamaño de fuente más pequeño para acomodar la leyenda
+                                    size: 11,
                                 }
                             }
                         },
@@ -413,11 +656,10 @@
             }
             initialMessage.classList.add('hidden');
             
-            // Asigna colores basándose en el índice (ciclado)
             const sortedLabels = labels.sort();
             
             labels.forEach((label, index) => {
-                const color = COLORS[index % COLORS.length]; // Usa el color correspondiente al índice en la lista ordenada
+                const color = COLORS[index % COLORS.length];
                 const count = counts[label];
                 
                 const detailItem = document.createElement('div');
@@ -440,6 +682,7 @@
             const emptyMessage = document.getElementById('empty-message');
             const noResultsMessage = document.getElementById('no-results-message');
             const recordsCount = document.getElementById('records-count');
+            const paginationContainer = document.getElementById('pagination');
             
             listContainer.innerHTML = '';
             recordsCount.textContent = `Total: ${filteredRegistros.length} registros`;
@@ -447,19 +690,26 @@
             if (registros.length === 0) {
                 emptyMessage.classList.remove('hidden');
                 noResultsMessage.classList.add('hidden');
+                paginationContainer.classList.add('hidden');
                 return;
             }
             
             if (filteredRegistros.length === 0) {
                 emptyMessage.classList.add('hidden');
                 noResultsMessage.classList.remove('hidden');
+                paginationContainer.classList.add('hidden');
                 return;
             }
             
             emptyMessage.classList.add('hidden');
             noResultsMessage.classList.add('hidden');
-
-            filteredRegistros.slice().reverse().forEach(registro => {
+            
+            const totalPages = Math.ceil(filteredRegistros.length / recordsPerPage);
+            const startIndex = (currentPage - 1) * recordsPerPage;
+            const endIndex = Math.min(startIndex + recordsPerPage, filteredRegistros.length);
+            const currentRecords = filteredRegistros.slice(startIndex, endIndex);
+            
+            currentRecords.slice().reverse().forEach(registro => {
                 const listItem = document.createElement('li');
                 listItem.className = 'bg-gray-50 p-4 rounded-lg flex justify-between items-center transition duration-150 hover:shadow-sm';
                 listItem.innerHTML = `
@@ -469,7 +719,6 @@
                         <p class="text-xs text-gray-400">${registro.fecha}</p>
                     </div>
                     <button data-id="${registro.id}" class="btn-delete text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition duration-150 ml-2" title="Eliminar registro">
-                        <!-- Icono SVG de Papelera -->
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V8z" clip-rule="evenodd" />
                         </svg>
@@ -478,13 +727,64 @@
                 listContainer.appendChild(listItem);
             });
 
-            // Agrega el listener de eliminación
             document.querySelectorAll('.btn-delete').forEach(button => {
                 button.addEventListener('click', (e) => {
-                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    const id = e.currentTarget.getAttribute('data-id');
                     deleteRecord(id);
                 });
             });
+            
+            renderPagination(totalPages);
+        }
+
+        /**
+         * Renderiza la paginación
+         */
+        function renderPagination(totalPages) {
+            const paginationContainer = document.getElementById('pagination');
+            
+            if (totalPages <= 1) {
+                paginationContainer.classList.add('hidden');
+                return;
+            }
+            
+            paginationContainer.classList.remove('hidden');
+            paginationContainer.innerHTML = '';
+            
+            const prevButton = document.createElement('button');
+            prevButton.textContent = 'Anterior';
+            prevButton.className = 'pagination-btn';
+            prevButton.disabled = currentPage === 1;
+            prevButton.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderRecordsList();
+                }
+            });
+            paginationContainer.appendChild(prevButton);
+            
+            for (let i = 1; i <= totalPages; i++) {
+                const pageButton = document.createElement('button');
+                pageButton.textContent = i;
+                pageButton.className = `pagination-btn ${i === currentPage ? 'active' : ''}`;
+                pageButton.addEventListener('click', () => {
+                    currentPage = i;
+                    renderRecordsList();
+                });
+                paginationContainer.appendChild(pageButton);
+            }
+            
+            const nextButton = document.createElement('button');
+            nextButton.textContent = 'Siguiente';
+            nextButton.className = 'pagination-btn';
+            nextButton.disabled = currentPage === totalPages;
+            nextButton.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderRecordsList();
+                }
+            });
+            paginationContainer.appendChild(nextButton);
         }
 
         /**
@@ -496,16 +796,14 @@
             const mostCommon = document.getElementById('most-common');
             const lastAdded = document.getElementById('last-added');
             
-            totalCases.textContent = filteredRegistros.length;
+            totalCases.textContent = registros.length;
             
-            // Contar categorías únicas
-            const categories = new Set(filteredRegistros.map(r => r.area));
+            const categories = new Set(registros.map(r => r.area));
             uniqueCategories.textContent = categories.size;
             
-            // Encontrar la categoría más común
-            if (filteredRegistros.length > 0) {
+            if (registros.length > 0) {
                 const counts = {};
-                filteredRegistros.forEach(r => {
+                registros.forEach(r => {
                     counts[r.area] = (counts[r.area] || 0) + 1;
                 });
                 
@@ -518,20 +816,147 @@
                     }
                 }
                 
-                // Acortar el texto si es demasiado largo
                 if (mostCommonCategory.length > 20) {
                     mostCommonCategory = mostCommonCategory.substring(0, 20) + '...';
                 }
                 mostCommon.textContent = mostCommonCategory;
                 
-                // Último registro añadido
-                const lastRecord = filteredRegistros[filteredRegistros.length - 1];
+                const lastRecord = registros[registros.length - 1];
                 const lastDate = new Date(lastRecord.id).toLocaleDateString();
                 lastAdded.textContent = lastDate;
             } else {
                 mostCommon.textContent = '-';
                 lastAdded.textContent = '-';
             }
+        }
+
+        /**
+         * Actualiza las estadísticas detalladas
+         */
+        function updateDetailedStats() {
+            const container = document.getElementById('detailed-stats');
+            const initialMessage = document.getElementById('initial-stats-message');
+            
+            container.innerHTML = '';
+            
+            if (filteredRegistros.length === 0) {
+                initialMessage.classList.remove('hidden');
+                return;
+            }
+            
+            initialMessage.classList.add('hidden');
+            
+            const { counts } = getStatistics();
+            const total = filteredRegistros.length;
+            
+            Object.entries(counts).forEach(([category, count]) => {
+                const percentage = ((count / total) * 100).toFixed(1);
+                
+                const statCard = document.createElement('div');
+                statCard.className = 'stat-card';
+                
+                statCard.innerHTML = `
+                    <h3 class="font-semibold text-gray-800 text-sm mb-2 truncate">${category}</h3>
+                    <div class="flex justify-between items-center">
+                        <span class="text-2xl font-bold text-blue-600">${count}</span>
+                        <span class="text-sm text-gray-500">${percentage}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                        <div class="bg-blue-600 h-2 rounded-full" style="width: ${percentage}%"></div>
+                    </div>
+                `;
+                
+                container.appendChild(statCard);
+            });
+            
+            const additionalStats = [
+                { title: 'Promedio por Categoría', value: (total / Object.keys(counts).length).toFixed(1) },
+                { title: 'Categoría Menos Frecuente', value: getCategoriaMenosFrecuente(counts) },
+                { title: 'Distribución por Materia', value: getDistribucionPorMateria() }
+            ];
+            
+            const trimestresConDatos = getTrimestresConDatos();
+            if (trimestresConDatos) {
+                additionalStats.unshift({ title: 'Registros por Trimestre', value: trimestresConDatos });
+            }
+            
+            additionalStats.forEach(stat => {
+                const statCard = document.createElement('div');
+                statCard.className = 'stat-card';
+                
+                statCard.innerHTML = `
+                    <h3 class="font-semibold text-gray-800 text-sm mb-2">${stat.title}</h3>
+                    <div class="text-lg font-bold text-blue-600">${stat.value}</div>
+                `;
+                
+                container.appendChild(statCard);
+            });
+        }
+
+        /**
+         * Obtiene la distribución de registros por trimestre
+         */
+        function getTrimestresConDatos() {
+            const trimestres = {
+                1: 0,
+                2: 0,
+                3: 0,
+                4: 0
+            };
+            
+            filteredRegistros.forEach(registro => {
+                const fecha = new Date(registro.fecha);
+                const trimestre = obtenerTrimestre(fecha);
+                trimestres[trimestre]++;
+            });
+            
+            const trimestresConDatos = Object.entries(trimestres)
+                .filter(([_, count]) => count > 0)
+                .map(([trimestre, count]) => `${trimestre}: ${count}`);
+            
+            return trimestresConDatos.length > 0 ? trimestresConDatos.join(', ') : null;
+        }
+
+        /**
+         * Obtiene la categoría menos frecuente
+         */
+        function getCategoriaMenosFrecuente(counts) {
+            if (Object.keys(counts).length === 0) return '-';
+            
+            let minCount = Infinity;
+            let minCategory = '';
+            
+            for (const [category, count] of Object.entries(counts)) {
+                if (count < minCount) {
+                    minCount = count;
+                    minCategory = category;
+                }
+            }
+            
+            if (minCategory.length > 15) {
+                minCategory = minCategory.substring(0, 15) + '...';
+            }
+            
+            return minCategory;
+        }
+
+        /**
+         * Obtiene la distribución por materia
+         */
+        function getDistribucionPorMateria() {
+            const materias = {};
+            
+            filteredRegistros.forEach(registro => {
+                const match = registro.area.match(/\((.*?)\)/);
+                if (match && match[1]) {
+                    const materia = match[1];
+                    materias[materia] = (materias[materia] || 0) + 1;
+                } else {
+                    materias['General'] = (materias['General'] || 0) + 1;
+                }
+            });
+            
+            return Object.keys(materias).length;
         }
 
         /**
@@ -542,14 +967,12 @@
             const trimestreFilter = document.getElementById('filter-trimestre').value;
             
             filteredRegistros = registros.filter(registro => {
-                // Filtro por área
                 if (areaFilter !== 'all' && registro.area !== areaFilter) {
                     return false;
                 }
                 
-                // Filtro por trimestre
                 if (trimestreFilter !== 'all') {
-                    const registroFecha = new Date(registro.id);
+                    const registroFecha = new Date(registro.fecha);
                     const trimestreRegistro = obtenerTrimestre(registroFecha);
                     if (trimestreRegistro.toString() !== trimestreFilter) {
                         return false;
@@ -559,6 +982,7 @@
                 return true;
             });
             
+            currentPage = 1;
             updateUI();
         }
 
@@ -569,6 +993,7 @@
             document.getElementById('filter-area').value = 'all';
             document.getElementById('filter-trimestre').value = 'all';
             filteredRegistros = [...registros];
+            currentPage = 1;
             updateUI();
         }
 
@@ -576,56 +1001,40 @@
          * Genera y descarga un PDF con el reporte
          */
         function generarPDF() {
-            if (registros.length === 0) {
-                alert('No hay datos para exportar.');
-                return;
-            }
+            const trimestreInforme = document.getElementById('trimestre-informe').value;
+            const anioInforme = document.getElementById('anio-informe').value;
+            const responsableInforme = document.getElementById('responsable-informe').value;
 
-            // Obtener trimestre actual
-            const fechaActual = new Date();
-            const trimestreActual = obtenerTrimestre(fechaActual);
-            const nombreTrimestreActual = nombreTrimestre(trimestreActual);
-            const añoActual = fechaActual.getFullYear();
-
-            // Crear instancia de jsPDF
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
 
-            // Título del documento
             doc.setFontSize(18);
             doc.text('REPORTE ESTADÍSTICO - DEFENSORÍAS', 105, 20, { align: 'center' });
             
-            // Información del trimestre
             doc.setFontSize(12);
-            doc.text(`Trimestre Informado: ${nombreTrimestreActual} (${añoActual})`, 105, 30, { align: 'center' });
+            doc.text(`Trimestre Informado: ${trimestreInforme} (${anioInforme})`, 105, 30, { align: 'center' });
+            doc.text(`Responsable: ${responsableInforme}`, 105, 38, { align: 'center' });
             
-            // Fecha de generación
             const fechaGeneracion = new Date().toLocaleDateString('es-ES');
-            doc.text(`Generado el: ${fechaGeneracion}`, 105, 38, { align: 'center' });
+            doc.text(`Generado el: ${fechaGeneracion}`, 105, 46, { align: 'center' });
             
-            // Estadísticas generales
             doc.setFontSize(14);
-            doc.text('ESTADÍSTICAS GENERALES', 20, 50);
+            doc.text('ESTADÍSTICAS GENERALES', 20, 60);
             
             doc.setFontSize(10);
-            doc.text(`Total de casos registrados: ${registros.length}`, 20, 60);
+            doc.text(`Total de casos registrados: ${registros.length}`, 20, 70);
             
-            // Contar categorías únicas
             const categorias = new Set(registros.map(r => r.area));
-            doc.text(`Categorías de intervención: ${categorias.size}`, 20, 67);
+            doc.text(`Categorías de intervención: ${categorias.size}`, 20, 77);
             
-            // Tabla de distribución por tipo de intervención
             doc.setFontSize(14);
-            doc.text('DISTRIBUCIÓN POR TIPO DE INTERVENCIÓN', 20, 80);
+            doc.text('DISTRIBUCIÓN POR TIPO DE INTERVENCIÓN', 20, 90);
             
-            // Obtener estadísticas
             const { counts } = getStatistics();
             
-            // Crear tabla
-            let yPos = 90;
+            let yPos = 100;
             doc.setFontSize(9);
             
-            // Encabezados de tabla
             doc.setFillColor(200, 200, 200);
             doc.rect(20, yPos, 170, 8, 'F');
             doc.setTextColor(0, 0, 0);
@@ -634,20 +1043,46 @@
             
             yPos += 10;
             
-            // Filas de datos
-            Object.entries(counts).forEach(([tipo, cantidad]) => {
+            const todosLosTipos = [
+                "1 - Expedientes y/o juicios iniciados (Civil y comercial)",
+                "1 - Expedientes y/o juicios iniciados (Familia)",
+                "1 - Expedientes y/o juicios iniciados (Laboral)",
+                "1 - Expedientes o legajos admin.",
+                "2 - Contestación de demanda (Civil y comercial)",
+                "2 - Contestación de demanda (Laboral)",
+                "2 - Contestación de demanda (Familia)",
+                "3 - Escritos Varios / Intervenciones (Penal)",
+                "3 - Escritos Varios / Intervenciones (Civil y comercial)",
+                "3 - Escritos Varios / Intervenciones (Familia)",
+                "3 - Escritos Varios / Intervenciones (Laboral)",
+                "4 - Patrocinios durante el trámite de proceso Judicial",
+                "5 - Recursos planteados (Apelaciones)",
+                "5 - Recursos planteados (Nulidades)",
+                "5 - Recursos planteados (Revocatorias)",
+                "5 - Recursos planteados (Queja)",
+                "5 - Recursos planteados (Casación)",
+                "6 - Audiencias (Penal / Cámara Gesell)",
+                "6 - Audiencias (Civil)",
+                "6 - Audiencias (Familia)",
+                "6 - Audiencias (Violencia Familiar)",
+                "6 - Audiencias (Laboral)",
+                "6 - Audiencias (Ce.Ju...)",
+                "99 - Otro tipo de intervención no especificado"
+            ];
+            
+            todosLosTipos.forEach(tipo => {
                 if (yPos > 270) {
                     doc.addPage();
                     yPos = 20;
                 }
                 
-                // Alternar colores de fila
                 if (yPos % 20 === 0) {
                     doc.setFillColor(245, 245, 245);
                     doc.rect(20, yPos - 2, 170, 8, 'F');
                 }
                 
-                // Truncar texto largo
+                const cantidad = counts[tipo] || 0;
+                
                 let tipoTexto = tipo;
                 if (tipoTexto.length > 60) {
                     tipoTexto = tipoTexto.substring(0, 60) + '...';
@@ -659,7 +1094,6 @@
                 yPos += 8;
             });
             
-            // Pie de página
             const totalPaginas = doc.internal.getNumberOfPages();
             for (let i = 1; i <= totalPaginas; i++) {
                 doc.setPage(i);
@@ -667,27 +1101,32 @@
                 doc.text(`Página ${i} de ${totalPaginas}`, 105, 290, { align: 'center' });
             }
             
-            // Descargar PDF
-            doc.save(`reporte_defensoria_${trimestreActual}T${añoActual}.pdf`);
+            doc.save(`reporte_defensoria_${trimestreInforme}_${anioInforme}.pdf`);
         }
 
         /**
          * Limpia todos los registros
          */
-        function clearAllRecords() {
+        async function clearAllRecords() {
             if (confirm('¿Está seguro de que desea eliminar todos los registros? Esta acción no se puede deshacer.')) {
-                registros = [];
-                filteredRegistros = [];
-                saveData();
-                updateUI();
+                try {
+                    if (isOnline) {
+                        await clearAllRecordsFromFirebase();
+                    }
+                    registros = [];
+                    filteredRegistros = [];
+                    localStorage.removeItem(STORAGE_KEY);
+                    updateUI();
+                } catch (error) {
+                    showNotification('Error al eliminar registros', 'error');
+                }
             }
         }
 
         /**
          * Manejador del envío del formulario.
-         * @param {Event} e
          */
-        function handleFormSubmit(e) {
+        async function handleFormSubmit(e) {
             e.preventDefault();
             const area = document.getElementById('area').value;
             const descripcion = document.getElementById('descripcion').value.trim();
@@ -695,61 +1134,77 @@
             if (!descripcion || !area) return;
 
             const newRecord = {
-                id: Date.now(),
                 area: area,
                 descripcion: descripcion,
-                fecha: new Date().toLocaleString()
+                fecha: new Date().toLocaleString(),
+                timestamp: new Date().getTime()
             };
 
-            registros.push(newRecord);
-            filteredRegistros.push(newRecord);
-            saveData();
-            updateUI();
-            
-            // Limpiar el formulario
-            document.getElementById('descripcion').value = '';
-            document.getElementById('area').selectedIndex = 0; // Volver a seleccionar el primero
-            
-            // Mostrar notificación de éxito
-            showNotification('Registro añadido correctamente', 'success');
+            showLoading();
+
+            try {
+                if (isOnline) {
+                    await addRecordToFirebase(newRecord);
+                } else {
+                    // En modo offline, agregar localmente
+                    newRecord.id = 'local_' + Date.now();
+                    registros.push(newRecord);
+                    filteredRegistros.push(newRecord);
+                    saveData();
+                    showNotification('Registro guardado localmente (sin conexión)', 'warning');
+                }
+                
+                updateUI();
+                document.getElementById('descripcion').value = '';
+                document.getElementById('area').selectedIndex = 0;
+                
+            } catch (error) {
+                showNotification('Error al guardar el registro', 'error');
+            } finally {
+                hideLoading();
+            }
         }
 
         /**
          * Elimina un registro por ID.
-         * @param {number} id
          */
-        function deleteRecord(id) {
+        async function deleteRecord(id) {
             if (confirm('¿Está seguro de que desea eliminar este registro?')) {
-                registros = registros.filter(r => r.id !== id);
-                filteredRegistros = filteredRegistros.filter(r => r.id !== id);
-                saveData();
-                updateUI();
-                showNotification('Registro eliminado correctamente', 'success');
+                try {
+                    if (isOnline && !id.startsWith('local_')) {
+                        await deleteRecordFromFirebase(id);
+                    }
+                    
+                    registros = registros.filter(r => r.id !== id);
+                    filteredRegistros = filteredRegistros.filter(r => r.id !== id);
+                    saveData();
+                    updateUI();
+                    
+                } catch (error) {
+                    showNotification('Error al eliminar el registro', 'error');
+                }
             }
         }
 
         /**
          * Muestra una notificación temporal
-         * @param {string} message 
-         * @param {string} type 
          */
         function showNotification(message, type) {
-            // Crear elemento de notificación
             const notification = document.createElement('div');
             notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 transition-all duration-300 transform translate-x-full ${
-                type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                type === 'success' ? 'bg-green-500 text-white' : 
+                type === 'error' ? 'bg-red-500 text-white' :
+                type === 'warning' ? 'bg-yellow-500 text-white' :
+                'bg-blue-500 text-white'
             }`;
             notification.textContent = message;
             
-            // Añadir al DOM
             document.body.appendChild(notification);
             
-            // Animación de entrada
             setTimeout(() => {
                 notification.classList.remove('translate-x-full');
             }, 10);
             
-            // Eliminar después de 3 segundos
             setTimeout(() => {
                 notification.classList.add('translate-x-full');
                 setTimeout(() => {
@@ -768,24 +1223,17 @@
             renderPieChart();
             renderDetails();
             updateGeneralStats();
+            updateDetailedStats();
         }
 
         // Inicialización
         window.onload = function() {
             initializeData();
-            updateUI();
             
-            // Listener para el formulario
             document.getElementById('registro-form').addEventListener('submit', handleFormSubmit);
-            
-            // Listener para filtros
             document.getElementById('apply-filters').addEventListener('click', applyFilters);
             document.getElementById('clear-filters').addEventListener('click', clearFilters);
-            
-            // Listener para exportación PDF
             document.getElementById('export-pdf-btn').addEventListener('click', generarPDF);
-            
-            // Listener para limpiar todo
             document.getElementById('clear-all-btn').addEventListener('click', clearAllRecords);
         };
     </script>
