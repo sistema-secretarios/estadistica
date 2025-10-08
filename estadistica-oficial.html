@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Defensoría Estadísticas Detalladas</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Carga de Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <!-- Carga de jsPDF para exportación a PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Carga de html2canvas para capturar elementos del DOM -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* Estilo base para el cuerpo */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb; /* Fondo muy claro */
+        }
+        /* Contenedor del gráfico circular para mantener el aspecto */
+        .chart-container {
+            position: relative;
+            height: 45vh; /* Aumentado un poco por la cantidad de leyendas */
+            width: 100%;
+        }
+        /* Estilos para filtros */
+        .filter-container {
+            transition: all 0.3s ease;
+        }
+        /* Estilo para botones de exportación */
+        .export-btn {
+            transition: all 0.2s ease;
+        }
+        .export-btn:hover {
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Encabezado Minimalista -->
+    <header class="p-4 border-b border-gray-200 bg-white">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+            <div>
+                <h2 class="text-2xl font-extrabold text-gray-800">Estadística Detallada (Defensoria 6)</h2>
+                <p class="text-sm text-gray-500">Registre casos según los ítems y materias específicos de la planilla oficial.</p>
+            </div>
+            <div class="mt-2 md:mt-0 flex space-x-2">
+                <button id="export-pdf-btn" class="export-btn bg-red-600 text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-red-700 transition duration-200 shadow-md">
+                    Exportar PDF
+                </button>
+                <button id="clear-all-btn" class="export-btn bg-gray-600 text-white text-sm font-medium py-2 px-3 rounded-lg hover:bg-gray-700 transition duration-200 shadow-md">
+                    Limpiar Todo
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Contenido Principal - Diseño de dos columnas responsive -->
+    <main class="flex flex-1 flex-col lg:flex-row p-4 gap-6">
+
+        <!-- Columna Izquierda: Listado de Registros y Formulario (50% en escritorio, 100% en móvil) -->
+        <section class="lg:w-1/2 w-full flex flex-col space-y-6">
+
+            <!-- Formulario de Registro -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Registrar Nuevo Caso</h2>
+                <form id="registro-form" class="space-y-4">
+                    <div>
+                        <label for="area" class="block text-sm font-medium text-gray-700 mb-1">Tipo de Intervención (Ítem y Materia)</label>
+                        <!-- Opciones basadas en el PDF: Combinando Ítem de Acción + Materia, en el orden solicitado. -->
+                        <select id="area" name="area" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                            <!-- ÍTEM 1: Expedientes y/o juicios iniciados -->
+                            <optgroup label="1 - Expedientes y/o juicios iniciados">
+                                <option value="1 - Expedientes y/o juicios iniciados (Civil y comercial)">1 (Civil y comercial)</option>
+                                <option value="1 - Expedientes y/o juicios iniciados (Familia)">1 (Familia)</option>
+                                <option value="1 - Expedientes y/o juicios iniciados (Laboral)">1 (Laboral)</option>
+                            </optgroup>
+                            <!-- ÍTEM 1: Expedientes o legajos admin. (nivel superior) -->
+                            <option value="1 - Expedientes o legajos admin.">1 - Expedientes o legajos admin.</option>
+
+                            <!-- ÍTEM 2: Contestación de demanda -->
+                            <optgroup label="2 - Contestación de demanda">
+                                <option value="2 - Contestación de demanda (Civil y comercial)">2 (Civil y comercial)</option>
+                                <option value="2 - Contestación de demanda (Laboral)">2 (Laboral)</option>
+                                <option value="2 - Contestación de demanda (Familia)">2 (Familia)</option>
+                            </optgroup>
+
+                            <!-- ÍTEM 3: Escritos Varios / Intervenciones -->
+                            <optgroup label="3 - Escritos Varios / Intervenciones">
+                                <option value="3 - Escritos Varios / Intervenciones (Penal)">3 (Penal)</option>
+                                <option value="3 - Escritos Varios / Intervenciones (Civil y comercial)">3 (Civil y comercial)</option>
+                                <option value="3 - Escritos Varios / Intervenciones (Familia)">3 (Familia)</option>
+                                <option value="3 - Escritos Varios / Intervenciones (Laboral)">3 (Laboral)</option>
+                            </optgroup>
+
+                            <!-- ÍTEM 4: Patrocinios durante el trámite de proceso Judicial -->
+                            <option value="4 - Patrocinios durante el trámite de proceso Judicial">4 - Patrocinios durante el trámite de proceso Judicial</option>
+
+                            <!-- ÍTEM 5: Recursos planteados -->
+                            <optgroup label="5 - Recursos planteados">
+                                <option value="5 - Recursos planteados (Apelaciones)">5 (Apelaciones)</option>
+                                <option value="5 - Recursos planteados (Nulidades)">5 (Nulidades)</option>
+                                <option value="5 - Recursos planteados (Revocatorias)">5 (Revocatorias)</option>
+                                <option value="5 - Recursos planteados (Queja)">5 (Queja)</option>
+                                <option value="5 - Recursos planteados (Casación)">5 (Casación)</option>
+                            </optgroup>
+
+                            <!-- ÍTEM 6: Audiencias -->
+                            <optgroup label="6 - Audiencias">
+                                <option value="6 - Audiencias (Penal / Cámara Gesell)">6 (Penal / Cámara Gesell)</option>
+                                <option value="6 - Audiencias (Civil)">6 (Civil)</option>
+                                <option value="6 - Audiencias (Familia)">6 (Familia)</option>
+                                <option value="6 - Audiencias (Violencia Familiar)">6 (Violencia Familiar)</option>
+                                <option value="6 - Audiencias (Laboral)">6 (Laboral)</option>
+                                <option value="6 - Audiencias (Ce.Ju...)">6 (Ce.Ju...)</option>
+                            </optgroup>
+                            
+                            <!-- Opción de reserva -->
+                            <option value="99 - Otro tipo de intervención no especificado">99 - Otro tipo de intervención no especificado</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="descripcion" class="block text-sm font-medium text-gray-700 mb-1">Detalle o Expediente</label>
+                        <input type="text" id="descripcion" name="descripcion" required class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150" placeholder="Ej: Demanda inicial de divorcio">
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200 shadow-md hover:shadow-lg">
+                        Agregar Registro
+                    </button>
+                </form>
+            </div>
+
+            <!-- Filtros para el listado -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 filter-container">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Filtrar Registros</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="filter-area" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Tipo de Intervención</label>
+                        <select id="filter-area" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                            <option value="all">Todos los tipos</option>
+                            <!-- Las mismas opciones que en el formulario principal -->
+                            <optgroup label="1 - Expedientes y/o juicios iniciados">
+                                <option value="1 - Expedientes y/o juicios iniciados (Civil y comercial)">1 (Civil y comercial)</option>
+                                <option value="1 - Expedientes y/o juicios iniciados (Familia)">1 (Familia)</option>
+                                <option value="1 - Expedientes y/o juicios iniciados (Laboral)">1 (Laboral)</option>
+                            </optgroup>
+                            <option value="1 - Expedientes o legajos admin.">1 - Expedientes o legajos admin.</option>
+                            <!-- Resto de opciones... -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="filter-trimestre" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Trimestre</label>
+                        <select id="filter-trimestre" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                            <option value="all">Todos los trimestres</option>
+                            <option value="1">Enero-Febrero-Marzo</option>
+                            <option value="2">Abril-Mayo-Junio</option>
+                            <option value="3">Julio-Agosto-Septiembre</option>
+                            <option value="4">Octubre-Noviembre-Diciembre</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-between">
+                    <button id="apply-filters" class="bg-blue-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200">
+                        Aplicar Filtros
+                    </button>
+                    <button id="clear-filters" class="bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-400 transition duration-200">
+                        Limpiar Filtros
+                    </button>
+                </div>
+            </div>
+
+            <!-- Listado de Registros -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex-1 overflow-y-auto max-h-[500px]">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-gray-700">Historial de Registros</h2>
+                    <span id="records-count" class="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                        Total: 0 registros
+                    </span>
+                </div>
+                <ul id="lista-registros" class="space-y-3">
+                    <!-- Los registros se insertarán aquí por JS -->
+                </ul>
+                <p id="empty-message" class="text-gray-500 italic mt-4 hidden">No hay registros aún. ¡Añade uno para comenzar a graficar!</p>
+                <p id="no-results-message" class="text-gray-500 italic mt-4 hidden">No se encontraron registros con los filtros aplicados.</p>
+            </div>
+        </section>
+
+        <!-- Columna Derecha: Gráfico y Detalle de Cantidades (50% en escritorio, 100% en móvil) -->
+        <section class="lg:w-1/2 w-full flex flex-col space-y-6">
+            
+            <!-- Gráfico Circular -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Distribución de Registros por Tipo de Intervención</h2>
+                <div class="chart-container">
+                    <canvas id="pieChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Detalle de Cantidades -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Resumen de Cantidades por Intervención</h2>
+                <div id="detalle-cantidades" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Los detalles se insertarán aquí por JS -->
+                    <p class="text-gray-500 italic col-span-2" id="initial-detail-message">Agregando registros se mostrará el detalle.</p>
+                </div>
+            </div>
+            
+            <!-- Estadísticas Generales -->
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Estadísticas Generales</h2>
+                <div id="general-stats" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-blue-50 p-4 rounded-lg text-center">
+                        <p class="text-2xl font-bold text-blue-600" id="total-cases">0</p>
+                        <p class="text-sm text-gray-600">Total Casos</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg text-center">
+                        <p class="text-2xl font-bold text-green-600" id="unique-categories">0</p>
+                        <p class="text-sm text-gray-600">Categorías</p>
+                    </div>
+                    <div class="bg-purple-50 p-4 rounded-lg text-center">
+                        <p class="text-2xl font-bold text-purple-600" id="most-common">-</p>
+                        <p class="text-sm text-gray-600">Más Frecuente</p>
+                    </div>
+                    <div class="bg-yellow-50 p-4 rounded-lg text-center">
+                        <p class="text-2xl font-bold text-yellow-600" id="last-added">-</p>
+                        <p class="text-sm text-gray-600">Último Registro</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Clave para el almacenamiento local
+        const STORAGE_KEY = 'defensoriaEstadisticas';
+        let chartInstance = null;
+        
+        // Colores predefinidos. Se repiten cíclicamente debido al gran número de categorías.
+        const COLORS = [
+            '#3b82f6', // blue-500
+            '#10b981', // emerald-500
+            '#f59e0b', // amber-500
+            '#ef4444', // red-500
+            '#a855f7', // violet-500
+            '#06b6d4', // cyan-500
+            '#f43f5e', // rose-500
+            '#84cc16', // lime-500
+            '#eab308', // yellow-500
+            '#4f46e5', // indigo-500
+        ];
+
+        // Lista de registros, inicialmente vacía o cargada desde localStorage
+        let registros = [];
+        let filteredRegistros = [];
+
+        /**
+         * Inicializa los datos cargando desde el almacenamiento local.
+         */
+        function initializeData() {
+            const storedData = localStorage.getItem(STORAGE_KEY);
+            if (storedData) {
+                try {
+                    registros = JSON.parse(storedData); 
+                    filteredRegistros = [...registros];
+                } catch (e) {
+                    console.error("Error al parsear datos de localStorage:", e);
+                    registros = [];
+                    filteredRegistros = [];
+                }
+            } else {
+                registros = [];
+                filteredRegistros = [];
+            }
+        }
+
+        /**
+         * Guarda los registros actuales en el almacenamiento local.
+         */
+        function saveData() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(registros));
+        }
+
+        /**
+         * Determina el trimestre de una fecha
+         * @param {Date} fecha 
+         * @returns {number} Número del trimestre (1-4)
+         */
+        function obtenerTrimestre(fecha) {
+            const mes = fecha.getMonth(); // 0-11
+            if (mes >= 0 && mes <= 2) return 1; // Enero-Febrero-Marzo
+            if (mes >= 3 && mes <= 5) return 2; // Abril-Mayo-Junio
+            if (mes >= 6 && mes <= 8) return 3; // Julio-Agosto-Septiembre
+            return 4; // Octubre-Noviembre-Diciembre
+        }
+
+        /**
+         * Obtiene el nombre del trimestre
+         * @param {number} trimestre 
+         * @returns {string} Nombre del trimestre
+         */
+        function nombreTrimestre(trimestre) {
+            const nombres = {
+                1: "Enero-Febrero-Marzo",
+                2: "Abril-Mayo-Junio", 
+                3: "Julio-Agosto-Septiembre",
+                4: "Octubre-Noviembre-Diciembre"
+            };
+            return nombres[trimestre] || "Trimestre no válido";
+        }
+
+        /**
+         * Procesa los registros para obtener el conteo por área.
+         * @returns {Object} { labels: Array<string>, data: Array<number>, counts: Object }
+         */
+        function getStatistics() {
+            // 1. Contar ocurrencias por categoría
+            const counts = filteredRegistros.reduce((acc, registro) => {
+                acc[registro.area] = (acc[registro.area] || 0) + 1;
+                return acc;
+            }, {});
+
+            // 2. Ordena las etiquetas alfabéticamente para garantizar la consistencia en el color
+            const labels = Object.keys(counts).sort();
+            const data = labels.map(label => counts[label]);
+
+            return { labels, data, counts };
+        }
+
+        /**
+         * Renderiza el gráfico circular usando Chart.js
+         */
+        function renderPieChart() {
+            const { labels, data } = getStatistics();
+            const ctx = document.getElementById('pieChart').getContext('2d');
+
+            // Asigna colores basándose en el índice (ciclado)
+            const backgroundColors = labels.map((_, i) => COLORS[i % COLORS.length]);
+
+            if (chartInstance) {
+                // Actualiza datos si la instancia ya existe
+                chartInstance.data.labels = labels;
+                chartInstance.data.datasets[0].data = data;
+                chartInstance.data.datasets[0].backgroundColor = backgroundColors;
+                chartInstance.update();
+                return;
+            }
+
+            // Crea la nueva instancia del gráfico
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut', 
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Número de Casos',
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        hoverOffset: 10,
+                        borderWidth: 2,
+                        borderColor: '#ffffff',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 8, // Menos padding debido a la cantidad de ítems
+                                boxWidth: 10,
+                                font: {
+                                    family: 'Inter',
+                                    size: 11, // Tamaño de fuente más pequeño para acomodar la leyenda
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    if (label) {
+                                        let total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        let value = context.parsed;
+                                        let percentage = (value / total * 100).toFixed(1) + '%';
+                                        return `${label}: ${value} casos (${percentage})`;
+                                    }
+                                    return label;
+                                }
+                            },
+                            bodyFont: { family: 'Inter', size: 12 },
+                            titleFont: { family: 'Inter', size: 12 },
+                        }
+                    },
+                }
+            });
+        }
+
+        /**
+         * Renderiza el detalle de cantidades en la columna derecha.
+         */
+        function renderDetails() {
+            const { labels, counts } = getStatistics();
+            const container = document.getElementById('detalle-cantidades');
+            const initialMessage = document.getElementById('initial-detail-message');
+            
+            container.innerHTML = '';
+            
+            if (filteredRegistros.length === 0) {
+                initialMessage.classList.remove('hidden');
+                return;
+            }
+            initialMessage.classList.add('hidden');
+            
+            // Asigna colores basándose en el índice (ciclado)
+            const sortedLabels = labels.sort();
+            
+            labels.forEach((label, index) => {
+                const color = COLORS[index % COLORS.length]; // Usa el color correspondiente al índice en la lista ordenada
+                const count = counts[label];
+                
+                const detailItem = document.createElement('div');
+                detailItem.className = 'flex justify-between items-center p-3 rounded-lg border-l-4 font-medium text-gray-800 transition duration-150 ease-in-out hover:bg-gray-50';
+                detailItem.style.borderColor = color;
+
+                detailItem.innerHTML = `
+                    <span class="text-sm truncate pr-2">${label}</span>
+                    <span class="text-lg font-extrabold" style="color: ${color};">${count}</span>
+                `;
+                container.appendChild(detailItem);
+            });
+        }
+
+        /**
+         * Renderiza el listado completo de registros en la columna izquierda.
+         */
+        function renderRecordsList() {
+            const listContainer = document.getElementById('lista-registros');
+            const emptyMessage = document.getElementById('empty-message');
+            const noResultsMessage = document.getElementById('no-results-message');
+            const recordsCount = document.getElementById('records-count');
+            
+            listContainer.innerHTML = '';
+            recordsCount.textContent = `Total: ${filteredRegistros.length} registros`;
+
+            if (registros.length === 0) {
+                emptyMessage.classList.remove('hidden');
+                noResultsMessage.classList.add('hidden');
+                return;
+            }
+            
+            if (filteredRegistros.length === 0) {
+                emptyMessage.classList.add('hidden');
+                noResultsMessage.classList.remove('hidden');
+                return;
+            }
+            
+            emptyMessage.classList.add('hidden');
+            noResultsMessage.classList.add('hidden');
+
+            filteredRegistros.slice().reverse().forEach(registro => {
+                const listItem = document.createElement('li');
+                listItem.className = 'bg-gray-50 p-4 rounded-lg flex justify-between items-center transition duration-150 hover:shadow-sm';
+                listItem.innerHTML = `
+                    <div class="flex-1">
+                        <p class="font-semibold text-gray-800">${registro.area}</p>
+                        <p class="text-sm text-gray-600 truncate">${registro.descripcion}</p>
+                        <p class="text-xs text-gray-400">${registro.fecha}</p>
+                    </div>
+                    <button data-id="${registro.id}" class="btn-delete text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition duration-150 ml-2" title="Eliminar registro">
+                        <!-- Icono SVG de Papelera -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V8z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                `;
+                listContainer.appendChild(listItem);
+            });
+
+            // Agrega el listener de eliminación
+            document.querySelectorAll('.btn-delete').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    deleteRecord(id);
+                });
+            });
+        }
+
+        /**
+         * Actualiza las estadísticas generales
+         */
+        function updateGeneralStats() {
+            const totalCases = document.getElementById('total-cases');
+            const uniqueCategories = document.getElementById('unique-categories');
+            const mostCommon = document.getElementById('most-common');
+            const lastAdded = document.getElementById('last-added');
+            
+            totalCases.textContent = filteredRegistros.length;
+            
+            // Contar categorías únicas
+            const categories = new Set(filteredRegistros.map(r => r.area));
+            uniqueCategories.textContent = categories.size;
+            
+            // Encontrar la categoría más común
+            if (filteredRegistros.length > 0) {
+                const counts = {};
+                filteredRegistros.forEach(r => {
+                    counts[r.area] = (counts[r.area] || 0) + 1;
+                });
+                
+                let maxCount = 0;
+                let mostCommonCategory = '';
+                for (const [category, count] of Object.entries(counts)) {
+                    if (count > maxCount) {
+                        maxCount = count;
+                        mostCommonCategory = category;
+                    }
+                }
+                
+                // Acortar el texto si es demasiado largo
+                if (mostCommonCategory.length > 20) {
+                    mostCommonCategory = mostCommonCategory.substring(0, 20) + '...';
+                }
+                mostCommon.textContent = mostCommonCategory;
+                
+                // Último registro añadido
+                const lastRecord = filteredRegistros[filteredRegistros.length - 1];
+                const lastDate = new Date(lastRecord.id).toLocaleDateString();
+                lastAdded.textContent = lastDate;
+            } else {
+                mostCommon.textContent = '-';
+                lastAdded.textContent = '-';
+            }
+        }
+
+        /**
+         * Aplica los filtros seleccionados
+         */
+        function applyFilters() {
+            const areaFilter = document.getElementById('filter-area').value;
+            const trimestreFilter = document.getElementById('filter-trimestre').value;
+            
+            filteredRegistros = registros.filter(registro => {
+                // Filtro por área
+                if (areaFilter !== 'all' && registro.area !== areaFilter) {
+                    return false;
+                }
+                
+                // Filtro por trimestre
+                if (trimestreFilter !== 'all') {
+                    const registroFecha = new Date(registro.id);
+                    const trimestreRegistro = obtenerTrimestre(registroFecha);
+                    if (trimestreRegistro.toString() !== trimestreFilter) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            updateUI();
+        }
+
+        /**
+         * Limpia todos los filtros
+         */
+        function clearFilters() {
+            document.getElementById('filter-area').value = 'all';
+            document.getElementById('filter-trimestre').value = 'all';
+            filteredRegistros = [...registros];
+            updateUI();
+        }
+
+        /**
+         * Genera y descarga un PDF con el reporte
+         */
+        function generarPDF() {
+            if (registros.length === 0) {
+                alert('No hay datos para exportar.');
+                return;
+            }
+
+            // Obtener trimestre actual
+            const fechaActual = new Date();
+            const trimestreActual = obtenerTrimestre(fechaActual);
+            const nombreTrimestreActual = nombreTrimestre(trimestreActual);
+            const añoActual = fechaActual.getFullYear();
+
+            // Crear instancia de jsPDF
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            // Título del documento
+            doc.setFontSize(18);
+            doc.text('REPORTE ESTADÍSTICO - DEFENSORÍAS', 105, 20, { align: 'center' });
+            
+            // Información del trimestre
+            doc.setFontSize(12);
+            doc.text(`Trimestre Informado: ${nombreTrimestreActual} (${añoActual})`, 105, 30, { align: 'center' });
+            
+            // Fecha de generación
+            const fechaGeneracion = new Date().toLocaleDateString('es-ES');
+            doc.text(`Generado el: ${fechaGeneracion}`, 105, 38, { align: 'center' });
+            
+            // Estadísticas generales
+            doc.setFontSize(14);
+            doc.text('ESTADÍSTICAS GENERALES', 20, 50);
+            
+            doc.setFontSize(10);
+            doc.text(`Total de casos registrados: ${registros.length}`, 20, 60);
+            
+            // Contar categorías únicas
+            const categorias = new Set(registros.map(r => r.area));
+            doc.text(`Categorías de intervención: ${categorias.size}`, 20, 67);
+            
+            // Tabla de distribución por tipo de intervención
+            doc.setFontSize(14);
+            doc.text('DISTRIBUCIÓN POR TIPO DE INTERVENCIÓN', 20, 80);
+            
+            // Obtener estadísticas
+            const { counts } = getStatistics();
+            
+            // Crear tabla
+            let yPos = 90;
+            doc.setFontSize(9);
+            
+            // Encabezados de tabla
+            doc.setFillColor(200, 200, 200);
+            doc.rect(20, yPos, 170, 8, 'F');
+            doc.setTextColor(0, 0, 0);
+            doc.text('TIPO DE INTERVENCIÓN', 22, yPos + 5);
+            doc.text('CANTIDAD', 160, yPos + 5, { align: 'right' });
+            
+            yPos += 10;
+            
+            // Filas de datos
+            Object.entries(counts).forEach(([tipo, cantidad]) => {
+                if (yPos > 270) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+                
+                // Alternar colores de fila
+                if (yPos % 20 === 0) {
+                    doc.setFillColor(245, 245, 245);
+                    doc.rect(20, yPos - 2, 170, 8, 'F');
+                }
+                
+                // Truncar texto largo
+                let tipoTexto = tipo;
+                if (tipoTexto.length > 60) {
+                    tipoTexto = tipoTexto.substring(0, 60) + '...';
+                }
+                
+                doc.text(tipoTexto, 22, yPos + 5);
+                doc.text(cantidad.toString(), 160, yPos + 5, { align: 'right' });
+                
+                yPos += 8;
+            });
+            
+            // Pie de página
+            const totalPaginas = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= totalPaginas; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.text(`Página ${i} de ${totalPaginas}`, 105, 290, { align: 'center' });
+            }
+            
+            // Descargar PDF
+            doc.save(`reporte_defensoria_${trimestreActual}T${añoActual}.pdf`);
+        }
+
+        /**
+         * Limpia todos los registros
+         */
+        function clearAllRecords() {
+            if (confirm('¿Está seguro de que desea eliminar todos los registros? Esta acción no se puede deshacer.')) {
+                registros = [];
+                filteredRegistros = [];
+                saveData();
+                updateUI();
+            }
+        }
+
+        /**
+         * Manejador del envío del formulario.
+         * @param {Event} e
+         */
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            const area = document.getElementById('area').value;
+            const descripcion = document.getElementById('descripcion').value.trim();
+
+            if (!descripcion || !area) return;
+
+            const newRecord = {
+                id: Date.now(),
+                area: area,
+                descripcion: descripcion,
+                fecha: new Date().toLocaleString()
+            };
+
+            registros.push(newRecord);
+            filteredRegistros.push(newRecord);
+            saveData();
+            updateUI();
+            
+            // Limpiar el formulario
+            document.getElementById('descripcion').value = '';
+            document.getElementById('area').selectedIndex = 0; // Volver a seleccionar el primero
+            
+            // Mostrar notificación de éxito
+            showNotification('Registro añadido correctamente', 'success');
+        }
+
+        /**
+         * Elimina un registro por ID.
+         * @param {number} id
+         */
+        function deleteRecord(id) {
+            if (confirm('¿Está seguro de que desea eliminar este registro?')) {
+                registros = registros.filter(r => r.id !== id);
+                filteredRegistros = filteredRegistros.filter(r => r.id !== id);
+                saveData();
+                updateUI();
+                showNotification('Registro eliminado correctamente', 'success');
+            }
+        }
+
+        /**
+         * Muestra una notificación temporal
+         * @param {string} message 
+         * @param {string} type 
+         */
+        function showNotification(message, type) {
+            // Crear elemento de notificación
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 transition-all duration-300 transform translate-x-full ${
+                type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+            }`;
+            notification.textContent = message;
+            
+            // Añadir al DOM
+            document.body.appendChild(notification);
+            
+            // Animación de entrada
+            setTimeout(() => {
+                notification.classList.remove('translate-x-full');
+            }, 10);
+            
+            // Eliminar después de 3 segundos
+            setTimeout(() => {
+                notification.classList.add('translate-x-full');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+
+        /**
+         * Actualiza el gráfico, los detalles y la lista.
+         */
+        function updateUI() {
+            renderRecordsList();
+            renderPieChart();
+            renderDetails();
+            updateGeneralStats();
+        }
+
+        // Inicialización
+        window.onload = function() {
+            initializeData();
+            updateUI();
+            
+            // Listener para el formulario
+            document.getElementById('registro-form').addEventListener('submit', handleFormSubmit);
+            
+            // Listener para filtros
+            document.getElementById('apply-filters').addEventListener('click', applyFilters);
+            document.getElementById('clear-filters').addEventListener('click', clearFilters);
+            
+            // Listener para exportación PDF
+            document.getElementById('export-pdf-btn').addEventListener('click', generarPDF);
+            
+            // Listener para limpiar todo
+            document.getElementById('clear-all-btn').addEventListener('click', clearAllRecords);
+        };
+    </script>
+</body>
+</html>
